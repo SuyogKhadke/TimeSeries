@@ -1,0 +1,271 @@
+---
+title: "Seasonal"
+author: "Suyog"
+date: "2023-04-03"
+output: html_document
+---
+
+# Analyzing and Forecasting Seasonal CO2 Emissions in Delhi using Time Series Analysis
+
+**by** Suyog Sunil Khadke
+
+20009192
+
+**Submitted to:** Professor Hadi Safari
+
+**Course:** MA 641 Time Series Analysis
+
+Stevens Institute of Technology
+
+**Date:** May 7th 2023
+
+**Abstract:**
+
+This project report aims to forecast the CO2 emissions in Delhi using time series analysis. The study utilizes the Box-Jenkins Method to model and forecast the CO2 emissions. The data exhibits seasonal behavior, which is addressed in the analysis. The main findings and conclusions of the study are presented in the report.
+
+Keywords: Time Series Analysis, Box-Jenkins Method, Seasonality, CO2 Emissions, Forecasting, SARIMA, ARIMA
+
+**Introduction:**
+
+The air quality in Delhi, India has been a major concern for several years, with pollution levels frequently reaching hazardous levels. One of the primary sources of air pollution in the city is the burning of stubble, which is the leftover straw from the previous season's crops. Farmers in the surrounding states of Punjab, Haryana, and Uttar Pradesh often burn stubble to prepare their fields for the next crop, which leads to a significant increase in air pollution in Delhi.
+
+![](images/stubble-burning-2.jpg)
+
+The impact of stubble burning on air quality in Delhi is a complex problem that requires a thorough understanding of the underlying trends and patterns in the data. Time series analysis can provide valuable insights into the nature of this problem by analyzing the temporal patterns of air quality measurements over time. It could also be used to build models that can predict future pollution levels based on historical data, which could be used to inform policy decisions and interventions to mitigate the problem.
+
+### Step 1: [Collecting Data]{.underline}
+
+```{r}
+library(readr)
+library(TSA)
+require(tseries)
+library(MASS)
+library(forecast)
+#CO2 Emission Per Millon Metric Ton. Monltly form 2006 to 2017
+library(readr)
+final_data_set_seasonal <- read_table("C:/Users/win/Desktop/final_data_set_seasonal.txt", 
+    col_names = FALSE, col_types = cols(X1 = col_datetime(format = "%Y-%m-%d ")))
+na.omit(final_data_set_seasonal)
+```
+
+```{r}
+tsmonthly <- ts(as.vector(t(as.matrix(final_data_set_seasonal$X2))), 
+                  start=c(1990,1), end=c(1995,2), frequency=12)
+
+
+tsmonthly
+
+
+library(seastests)
+#dropping NA values
+tsmonthly<-na.omit(tsmonthly)
+
+isSeasonal(tsmonthly, test = "combined", freq = 12)
+
+```
+
+CO2 emissions (in million metric tons) for each month of several years. The emissions are recorded for each year from 1990 to 1995
+
+```{r}
+par(mfrow = c(1, 1), mar = c(1, 0, 1, 0) + 0.2, oma = c(1, 2, 2, 0))
+plot(tsmonthly, main = "Monthly Time Series Data",type='l',lwd=2,col=4)
+
+```
+
+Seasonal data and a slightly upward trend suggests that there is a cyclical pattern in the data, but there is also a gradual increase in the overall trend.
+
+```{r}
+par(mfrow = c(1, 1), mar = c(1, 0, 1, 0) + 0.2, oma = c(1, 2, 2, 0))
+plot(tsmonthly, main = "Monthly Time Series Data",type='l',lwd=2)
+points(y = tsmonthly, x = time(tsmonthly), pch = as.vector(season(tsmonthly)), lwd = 1, col = 2, bg = "blue")
+```
+
+This is an additional graph that depicts the values on a monthly basis.
+
+```{r}
+library(seastests)
+#dropping NA values
+tsmonthly<-na.omit(tsmonthly)
+
+isSeasonal(tsmonthly, test = "combined", freq = 12)
+```
+
+By default, the WO-test combines the results of the QS-test and the kw-test, both calculated on the
+
+residuals of an automatic non-seasonal ARIMA model. If the p-value of the QS-test is below 0.01
+
+or the p-value of the kw-test is below 0.002, the WO-test will classify the corresponding time series
+
+as seasonal.
+
+```{r}
+library(seastests)
+combined_test(tsmonthly,freq = 12)
+```
+
+All the above test classifies the data as seasonal.
+
+```{r}
+adf.test(tsmonthly)
+
+```
+
+According to ADF test the time series is stationary.
+
+### Step 2: [Finding Models]{.underline}
+
+```{r}
+acf((tsmonthly), lag.max = 70)
+```
+
+We got Tailing off ACF. Now let us see the PACF
+
+```{r}
+pacf((tsmonthly), lag.max = 70)
+```
+
+PACF suggests that there might be an AR(2) process.
+
+```{r}
+eacf(tsmonthly)
+```
+
+From EACF we have ARMA(2,1). We will consider this model as well.
+
+#### ARMA(2,1)
+
+```{r}
+first_fit<-(Arima(tsmonthly, order = c(2, 0, 1), seasonal = list(order = c(1, 0, 1), period = 12)))
+
+first_fit
+```
+
+We are getting AIC=-49.18 so far we will record this value and compare it with further values.
+
+#### ARIMA(4,1,1):
+
+```{r}
+sarima_model <- auto.arima(tsmonthly, seasonal = TRUE, stepwise = FALSE,
+                           approximation = FALSE, D = 0, max.order = 5, 
+                           max.P = 5, max.D = 0, max.Q = 3)
+
+# Print the summary of the fitted SARIMA model
+summary(sarima_model)
+```
+
+We are getting AIC=265.78. As we have better model before this we should not consider this model for now.
+
+\$
+
+\\begin{equation}(1 - \\phi_1 L - \\phi_2 L\^2 - \\phi_3 L\^3 - \\phi_4 L\^4)(1 - L)y_t = \\theta_1 \\varepsilon\_{t-1} + \\varepsilon_t\\end{equation} \$
+
+### Step 3/4: [Parameter Reduency \| Parameter Estimation]{.underline}
+
+```{r}
+library(forecast)
+best=99999999999
+best_Index=0
+for (p in c(0,1,2,3)){
+ 
+    for (q in c(0,1,2,3)){
+      for (P in c(0,1,2,3)){
+          for (Q in c(0,1,2,3)){
+    sarima_model <- tryCatch({
+  # Code block to execute
+  (Arima(tsmonthly, order = c(p, 0, q), seasonal = list(order = c(P, 0, Q), period = 12))) 
+}, error = function(e) {
+  # Handler for errors
+  #print("Error")
+  return((Arima(tsmonthly, order = c(0, 0, 0), seasonal = list(order = c(0, 0, 0), period = 12))))
+})
+    #print(c(AIC(sarima_model),p,q,P,Q))
+    if(AIC(sarima_model)<best){
+      best=AIC(sarima_model)
+      best_Index=c(p,q,P,Q)
+    }
+  }
+}
+}}
+
+```
+
+```{r}
+cat("Best Index",best_Index)
+
+```
+
+Best AIC is -54. something at (3,3 1,1)
+
+###SARMA(3,3)(1,1) S=12
+
+So this is our Final Best model so far.
+
+```{r}
+ final_fit<-(Arima(tsmonthly, order = c(3, 0, 3), seasonal = list(order = c(1, 0, 1), period = 12))) 
+ 
+final_fit
+```
+
+### Step 5: [Residule Analysis]{.underline}
+
+```{r}
+
+plot(final_fit$residuals,col=10,lwd=2)
+
+```
+
+```{r}
+acf(final_fit$residuals, lag.max = 60,col=010,lwd=2)
+```
+
+```{r}
+pacf(final_fit$residuals, lag.max = 60,col=10,lwd=2)
+```
+
+```{r}
+#plot time series data
+hist(final_fit$residuals,col = 3,lwd=2)
+```
+
+```{r}
+qqnorm(final_fit$residuals, col=2,lwd=2)
+qqline(final_fit$residuals, col=9,lwd=2)
+```
+
+```{r}
+shapiro.test(final_fit$residuals)
+```
+
+The residuals are not normally distributed. overall performance of model seems good. we will move ahed with LB test.
+
+```{r}
+plot(density(final_fit$residuals),col=10, lwd=2)
+```
+
+```{r}
+Box.test(final_fit$residuals, lag = 20, type = "Ljung-Box")
+
+```
+
+p-value is 0.8245, indicating that there is no evidence of significant autocorrelation in the residuals. This is a good result as it suggests that the model is adequately capturing the structure of the data and there are no significant patterns left in the residuals.
+
+```{r}
+par(mfrow = c(1, 1), mar = c(1, 0, 1, 0) + 0.2, oma = c(1, 2, 2, 0))
+tsdiag(final_fit, main = "Residuals of Ljung-Box Test")
+
+```
+
+### Step 6: [Forecasting]{.underline}
+
+```{r}
+library(forecast)
+
+
+# Generate a 18-month forecast from the SARIMA model
+forecast_data <- forecast(tsmonthly, h = 18)
+
+# Plot the forecasted values
+plot(forecast_data,col = 2,lwd=2)
+```
+
+**Conclusion:** In this project, time series data was analyzed using various models, including AR(2), ARMA(2,1), and SARMA(3,3)(1,1) with a seasonal period of 12. The SARMA(3,3)(1,1) model was found to be the best fit with an AIC value of -54. The model was further evaluated using residual analysis techniques, including ACF plot, histogram, qq plot, Shapiro Wiki test, and Ljung-Box test. The results of these tests showed that the model was a good fit for the data. Finally, the model was used to forecast future values based on the original data. Overall, the results of this analysis suggest that the SARMA(3,3)(1,1) model is a suitable approach for modeling and forecasting the given time series data.

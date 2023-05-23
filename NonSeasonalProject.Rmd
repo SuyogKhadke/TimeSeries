@@ -1,0 +1,171 @@
+---
+title: "NonSeasonal"
+author: "Suyog"
+date: "2023-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Analyzing and Forecasting Globle CO2 Emissions using Time Series Analysis
+
+**Introduction:**
+
+Global carbon emissions refer to the amount of carbon dioxide (CO2) and other greenhouse gases (GHGs) released into the atmosphere from various human activities, such as burning fossil fuels, deforestation, and agriculture. Carbon emissions are the primary driver of climate change, and reducing these emissions is critical to mitigating the impacts of climate change.
+
+![](images/90787004d7ed40ca89415698515148a8.webp)
+
+### Step 1: [Collecting Data]{.underline}
+
+```{r}
+library(TSA)
+library(tseries)
+library(forecast)
+dataCo2 <- datasetCO2Emission <- read.csv("C:/Users/win/Desktop/datasetCO2Emission.txt", header=FALSE)
+names(dataCo2)[2] <- "Carbon_Emission"
+names(dataCo2)[1] <- "Year"
+
+tsdata <- ts(dataCo2[,2], start = c(1949, 1), frequency = 1)
+```
+
+```{r}
+#NO NA values in the dataset
+sum(is.na(tsdata))
+```
+
+```{r}
+plot(tsdata,ylab='Carbon Emission Per Metric Tons',xlab='Years',type='o' , col="blue")
+```
+
+The graph of global carbon emissions over time shows a steadily increasing trend, indicating a growing concern for climate change.
+
+```{r}
+adf.test(tsdata)
+```
+
+It is not stationary. Let us consider the First Difference.
+
+```{r}
+stationary_data=(diff(tsdata))
+adf.test(stationary_data)
+```
+
+As the test Suggest data is Stationary after first difference.
+
+### Step 2: [Finding Models]{.underline}
+
+```{r}
+acf((stationary_data),lag.max = 70)
+```
+
+We got Tailing off ACF. Now let us see the PACF
+
+```{r}
+pacf((stationary_data),lag.max = 70)
+```
+
+PACF Tails off as well suggests that there might be an ARMA() process.
+
+ACF and PACF suggest it is type of ARIMA(). Now our task is to get which ARIMA() it is?
+
+```{r}
+eacf((stationary_data))
+```
+
+We have two models to consider ARIMA(2,1,3) and ARIMA(2,1,1)
+
+### Step 3/4: [Parameter Reduency \| Parameter Estimation]{.underline}
+
+```{r}
+auto_arima_co2 <- auto.arima((stationary_data))
+summary(auto_arima_co2)
+```
+
+```{r}
+best=99999999999
+best_Index=0
+for (p in c(0,1,2,3,4,5)){
+  for (q in c(0,1,2,3,4,5)){
+    arima_model <- arima((stationary_data), order = c(p,1,q))
+    #print(c(AIC(arima_model),p,1,q))
+    if(AIC(arima_model)<best){
+      best=AIC(arima_model)
+      best_Index=c(p,q)
+    }
+  }
+}
+
+```
+
+```{r}
+cat("Best AIC so far", best_Index)
+```
+
+By Brute-force we got ARIMA(2,1,3) model with lowest AIC score. We should consider this model for final fit.
+
+```{r}
+
+arima_model <- arima((stationary_data), order = c(0,1,0))
+arima_model$aic
+```
+
+Now we are finally fitting ARIMA(2,1,3) and move ahead with residual analysis.
+
+### Step 5: [Residule Analysis]{.underline}
+
+```{r}
+arima_model <- arima((stationary_data), order = c(2,1,3))
+plot(arima_model$residuals,col=2)
+```
+
+```{r}
+hist(arima_model$residuals,col=3)
+```
+
+```{r}
+qqnorm(arima_model$residuals,col=2)
+qqline(arima_model$residuals,lwd=2)
+```
+
+```{r}
+
+shapiro.test(arima_model$residuals)
+
+```
+
+The residuals are not normally distributed. overall performance of model seems good. we will move ahead with LB test.
+
+```{r}
+#Changes this to professors LB plot
+Lb=Box.test(arima_model$residuals, lag = 10, type = "Ljung-Box")
+Lb
+```
+
+```{r}
+acf(arima_model$residuals, lag.max = length(tsdata))
+```
+
+```{r}
+pacf(arima_model$residuals, lag.max = length(tsdata))
+```
+
+```{r}
+par(mfrow = c(1, 1), mar = c(1, 0, 1, 0) + 0.2, oma = c(1, 2, 2, 0))
+tsdiag(arima_model, main = "Residuals of Ljung-Box Test")
+
+```
+
+### Step 6: [Forecasting]{.underline}
+
+```{r}
+library(forecast)
+
+
+forecast_data <- forecast(tsdata, h = 10)
+
+plot(forecast_data,col = 2,lwd=2)
+```
+
+**Conclusion:** In this project, time series data was analyzed using various models, including ARIMA(2,1,1), ARIMA(2,1,3), and ARIMA(2,1,3) was finilized. The ARIMA(2,1,3) model was found to be the best fit with lowest AIC value. The model was further evaluated using residual analysis techniques, including ACF plot, histogram, qq plot, Shapiro Wiki test, and Ljung-Box test. The results of these tests showed that the model was a good fit for the data. Finally, the model was used to forecast future values based on the original data. Overall, the results of this analysis suggest that the ARIMA(2,1,3) model is a suitable approach for modeling and forecasting the given time series data.
